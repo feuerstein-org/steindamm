@@ -205,7 +205,7 @@ class TokenBucketBase(BaseModel):
         tokens -= tokens_needed
 
         # Persist updated state
-        buckets[self.key] = {"slot": slot, "tokens": tokens, "last_update": time.time()}
+        buckets[self.key] = {"slot": slot, "tokens": tokens}
 
         return slot
 
