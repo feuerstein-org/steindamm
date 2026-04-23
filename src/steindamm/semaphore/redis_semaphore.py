@@ -1,51 +1,52 @@
-"""Semaphore limiter implementation."""
+"""
+Synchronous and asynchronous Redis-backed semaphore implementations.
+
+These implementations use Redis and a Lua script to coordinate semaphore state
+across processes and machines. Both standalone Redis instances and Redis Cluster
+are supported.
+"""
 
 from datetime import datetime
 from logging import getLogger
 from types import TracebackType
-from typing import Annotated, ClassVar
+from typing import ClassVar
 
-from pydantic import BaseModel, Field
 from redis.asyncio.client import Pipeline
 from redis.asyncio.cluster import ClusterPipeline
 
-from steindamm import MaxSleepExceededError
 from steindamm.base import AsyncLuaScriptBase, SyncLuaScriptBase
+from steindamm.exceptions import MaxSleepExceededError
+from steindamm.semaphore.semaphore_base import SemaphoreBase
 
 logger = getLogger(__name__)
 
-PositiveInt = Annotated[int, Field(gt=0)]
-NonNegativeFloat = Annotated[float, Field(ge=0)]
 
+class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
+    """
+    Synchronous Redis-backed semaphore.
 
-# TODO: Implement local semaphore as done with token bucket.
-class SemaphoreBase(BaseModel):  # noqa: D101 TODO: Fix after local semaphore is added
-    name: str
-    capacity: PositiveInt = 5
-    expiry: PositiveInt = 60
-    max_sleep: NonNegativeFloat = 30
+    Args:
+        name: Unique identifier for this semaphore.
+        connection: Redis connection (SyncRedis or SyncRedisCluster).
+        capacity: Maximum number of concurrent holders allowed.
+        expiry: Key expiry time in seconds.
+        max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
 
-    @property
-    def key(self) -> str:
-        """Key to use for the Semaphore list."""
-        return f"{{limiter}}:semaphore:{self.name}"
+    Example:
+        .. code-block:: python
 
-    @property
-    def exists(self) -> str:
-        """Key to use when checking if the Semaphore list has been created or not."""
-        return f"{{limiter}}:semaphore:{self.name}-exists"
+            from redis import Redis  # or from redis.cluster import RedisCluster
+            redis_conn = Redis(host='localhost', port=6379)
+            semaphore = SyncRedisSemaphore(connection=redis_conn, name="api", capacity=5)
+            with semaphore:
+                make_api_call()
 
-    def __str__(self) -> str:
-        return f"Semaphore instance for queue {self.key}"
+    """
 
-
-class SyncSemaphore(SemaphoreBase, SyncLuaScriptBase):  # noqa: D101 TODO: Fix after local semaphore is added
-    script_name: ClassVar[str] = "semaphore.lua"
+    script_name: ClassVar[str] = "semaphore/semaphore.lua"
 
     def __enter__(self) -> None:
         """Call the semaphore Lua script to create a semaphore, then call BLPOP to acquire it."""
-        # Retrieve timestamp for when to wake up from Redis
-        # To understand what exists does, check the Lua script
         if self.script(
             keys=[self.key, self.exists],
             args=[self.capacity],
@@ -62,7 +63,6 @@ class SyncSemaphore(SemaphoreBase, SyncLuaScriptBase):  # noqa: D101 TODO: Fix a
         pipeline.expire(self.exists, self.expiry)
         pipeline.execute()
 
-        # Raise an exception if we exceeded `max_sleep`
         if 0.0 < self.max_sleep < (datetime.now() - start).total_seconds():
             raise MaxSleepExceededError("Max sleep exceeded waiting for Semaphore")
 
@@ -83,13 +83,32 @@ class SyncSemaphore(SemaphoreBase, SyncLuaScriptBase):  # noqa: D101 TODO: Fix a
         logger.debug("Released semaphore %s", self.name)
 
 
-class AsyncSemaphore(SemaphoreBase, AsyncLuaScriptBase):  # noqa: D101 TODO: Fix after local semaphore is added
-    script_name: ClassVar[str] = "semaphore.lua"
+class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
+    """
+    Asynchronous Redis-backed semaphore.
+
+    Args:
+        name: Unique identifier for this semaphore.
+        connection: Redis connection (AsyncRedis or AsyncRedisCluster).
+        capacity: Maximum number of concurrent holders allowed.
+        expiry: Key expiry time in seconds.
+        max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
+
+    Example:
+        .. code-block:: python
+
+            from redis.asyncio import Redis  # or from redis.asyncio.cluster import RedisCluster
+            redis_conn = Redis(host='localhost', port=6379)
+            semaphore = AsyncRedisSemaphore(connection=redis_conn, name="api", capacity=5)
+            async with semaphore:
+                await make_api_call()
+
+    """
+
+    script_name: ClassVar[str] = "semaphore/semaphore.lua"
 
     async def __aenter__(self) -> None:
         """Call the semaphore Lua script to create a semaphore, then call BLPOP to acquire it."""
-        # Retrieve timestamp for when to wake up from Redis
-
         if await self.script(
             keys=[self.key, self.exists],
             args=[self.capacity],
@@ -106,7 +125,6 @@ class AsyncSemaphore(SemaphoreBase, AsyncLuaScriptBase):  # noqa: D101 TODO: Fix
         pipeline.expire(self.exists, self.expiry)  # type: ignore[union-attr]
         await pipeline.execute()
 
-        # Raise an exception if we waited too long
         if 0.0 < self.max_sleep < (datetime.now() - start).total_seconds():
             raise MaxSleepExceededError(f"Max sleep ({self.max_sleep}s) exceeded waiting for Semaphore")
 
