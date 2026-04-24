@@ -16,11 +16,15 @@ from redis.client import Redis as SyncRedis
 from redis.cluster import RedisCluster as SyncRedisCluster
 
 from steindamm import (
+    AsyncLocalSemaphore,
     AsyncLocalTokenBucket,
+    AsyncRedisSemaphore,
     AsyncRedisTokenBucket,
     AsyncSemaphore,
     AsyncTokenBucket,
+    SyncLocalSemaphore,
     SyncLocalTokenBucket,
+    SyncRedisSemaphore,
     SyncRedisTokenBucket,
     SyncSemaphore,
     SyncTokenBucket,
@@ -68,14 +72,18 @@ ASYNC_CONNECTIONS: list[partial[AsyncRedis] | partial[AsyncRedisCluster] | Calla
 
 
 async def async_run(
-    limiter: AsyncSemaphore | AsyncRedisTokenBucket | AsyncLocalTokenBucket, sleep_duration: float
+    limiter: AsyncLocalSemaphore | AsyncRedisSemaphore | AsyncRedisTokenBucket | AsyncLocalTokenBucket,
+    sleep_duration: float,
 ) -> None:
     """Async: acquire the limiter and sleep for the specified duration."""
     async with limiter:
         await asyncio.sleep(sleep_duration)
 
 
-def sync_run(limiter: SyncSemaphore | SyncLocalTokenBucket | SyncRedisTokenBucket, sleep_duration: float) -> None:
+def sync_run(
+    limiter: SyncLocalSemaphore | SyncRedisSemaphore | SyncLocalTokenBucket | SyncRedisTokenBucket,
+    sleep_duration: float,
+) -> None:
     """Sync: acquire the limiter and sleep for the specified duration."""
     with limiter:
         time.sleep(sleep_duration)
@@ -121,18 +129,20 @@ class SemaphoreConfig:
     max_sleep: float = 60.0
 
 
-def sync_semaphore_factory(  # noqa: D103 TODO: Fix after local semaphore is added
-    *, connection: SyncRedis | SyncRedisCluster, config: SemaphoreConfig | None = None
-) -> SyncSemaphore:
+def sync_semaphore_factory(
+    *, connection: SyncRedis | SyncRedisCluster | None, config: SemaphoreConfig | None = None
+) -> SyncRedisSemaphore | SyncLocalSemaphore:
+    """Create a SyncSemaphore using Redis or local in-memory backend."""
     if config is None:
         config = SemaphoreConfig()
 
     return SyncSemaphore(connection=connection, **asdict(config))
 
 
-def async_semaphore_factory(  # noqa: D103 TODO: Fix after local semaphore is added
-    *, connection: AsyncRedis | AsyncRedisCluster, config: SemaphoreConfig | None = None
-) -> AsyncSemaphore:
+def async_semaphore_factory(
+    *, connection: AsyncRedis | AsyncRedisCluster | None, config: SemaphoreConfig | None = None
+) -> AsyncRedisSemaphore | AsyncLocalSemaphore:
+    """Create an AsyncSemaphore using Redis or local in-memory backend."""
     if config is None:
         config = SemaphoreConfig()
 

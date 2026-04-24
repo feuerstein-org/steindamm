@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import partial
 
@@ -12,15 +13,11 @@ from redis.cluster import RedisCluster
 from steindamm import MaxSleepExceededError
 from tests.conftest import SYNC_CONNECTIONS, SemaphoreConfig, sync_semaphore_factory
 
-ConnectionFactory = partial[Redis] | partial[RedisCluster]
+ConnectionFactory = partial[Redis] | partial[RedisCluster] | Callable[[], None]
 
 
 @pytest.mark.parametrize("connection_factory", SYNC_CONNECTIONS)
 def test_sync_semaphore(connection_factory: ConnectionFactory) -> None:
-    connection = connection_factory()
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
-
     start = datetime.now()
     for _ in range(5):
         with sync_semaphore_factory(connection=connection_factory()):
@@ -30,7 +27,7 @@ def test_sync_semaphore(connection_factory: ConnectionFactory) -> None:
     assert timedelta(seconds=1) < datetime.now() - start < timedelta(seconds=2)
 
 
-def _run(connection: Redis | RedisCluster, config: SemaphoreConfig, sleep: float) -> None:
+def _run(connection: Redis | RedisCluster | None, config: SemaphoreConfig, sleep: float) -> None:
     with sync_semaphore_factory(connection=connection, config=config):
         time.sleep(sleep)
 
@@ -38,8 +35,6 @@ def _run(connection: Redis | RedisCluster, config: SemaphoreConfig, sleep: float
 @pytest.mark.parametrize("connection_factory", SYNC_CONNECTIONS)
 def test_sync_max_sleep(connection_factory: ConnectionFactory) -> None:
     connection = connection_factory()
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
 
     config = SemaphoreConfig(max_sleep=0.1, expiry=1)
     threading.Thread(target=_run, args=(connection, config, 1)).start()
