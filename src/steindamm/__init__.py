@@ -5,19 +5,27 @@ Use SyncTokenBucket or AsyncTokenBucket to automatically select between Redis-ba
 and local in-memory implementations based on whether a Redis connection is provided.
 
 For explicit control over the implementation, import and use
-SyncRedisTokenBucket, AsyncRedisTokenBucket, SyncLocalTokenBucket, or AsyncLocalTokenBucket directly.
+ - SyncRedisTokenBucket
+ - AsyncRedisTokenBucket
+ - SyncLocalTokenBucket
+ - AsyncLocalTokenBucket
+ - SyncRedisSemaphore
+ - AsyncRedisSemaphore
+ - SyncLocalSemaphore
+ - AsyncLocalSemaphore
 """
 
 from typing import Any
 
-# TODO: Add local semaphore implementation and update docs accordingly
 from steindamm.exceptions import MaxSleepExceededError, NoTokensAvailableError
+from steindamm.semaphore.local_semaphore import AsyncLocalSemaphore, SyncLocalSemaphore
+from steindamm.semaphore.semaphore import AsyncSemaphore, SyncSemaphore
 from steindamm.token_bucket.local_token_bucket import AsyncLocalTokenBucket, SyncLocalTokenBucket
 from steindamm.token_bucket.token_bucket import AsyncTokenBucket, SyncTokenBucket
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy import for Redis-based classes to avoid requiring redis when not needed."""
+    """Lazy import Redis-based classes to avoid requiring redis when not needed."""
     if name == "AsyncRedisTokenBucket":
         from steindamm.token_bucket.redis_token_bucket import AsyncRedisTokenBucket
 
@@ -26,14 +34,14 @@ def __getattr__(name: str) -> Any:
         from steindamm.token_bucket.redis_token_bucket import SyncRedisTokenBucket
 
         return SyncRedisTokenBucket
-    if name == "AsyncSemaphore":
-        from steindamm.semaphore import AsyncSemaphore
+    if name == "AsyncRedisSemaphore":
+        from steindamm.semaphore.redis_semaphore import AsyncRedisSemaphore
 
-        return AsyncSemaphore
-    if name == "SyncSemaphore":
-        from steindamm.semaphore import SyncSemaphore
+        return AsyncRedisSemaphore
+    if name == "SyncRedisSemaphore":
+        from steindamm.semaphore.redis_semaphore import SyncRedisSemaphore
 
-        return SyncSemaphore
+        return SyncRedisSemaphore
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -43,13 +51,17 @@ def __dir__() -> list[str]:
 
 
 __all__ = (
+    "AsyncLocalSemaphore",
     "AsyncLocalTokenBucket",
+    "AsyncRedisSemaphore",  # type: ignore[reportUnsupportedDunderAll]
     "AsyncRedisTokenBucket",  # type: ignore[reportUnsupportedDunderAll]
     "AsyncSemaphore",  # type: ignore[reportUnsupportedDunderAll]
     "AsyncTokenBucket",
     "MaxSleepExceededError",
     "NoTokensAvailableError",
+    "SyncLocalSemaphore",
     "SyncLocalTokenBucket",
+    "SyncRedisSemaphore",  # type: ignore[reportUnsupportedDunderAll]
     "SyncRedisTokenBucket",  # type: ignore[reportUnsupportedDunderAll]
     "SyncSemaphore",  # type: ignore[reportUnsupportedDunderAll]
     "SyncTokenBucket",

@@ -28,8 +28,8 @@ We currently support Python 3.11, 3.12, and 3.13.
 - Context manager interface (`with` / `async with`)
 
 ### Flexibility & Control
-- **Factory Classes**: `SyncTokenBucket` and `AsyncTokenBucket` automatically choose implementation based on connection
-- **Explicit Classes**: Direct access to `SyncRedisTokenBucket`, `AsyncRedisTokenBucket`, `SyncLocalTokenBucket`, `AsyncLocalTokenBucket`
+- **Factory Classes**: `SyncTokenBucket`, `AsyncTokenBucket`, `SyncSemaphore`, and `AsyncSemaphore` automatically choose implementation based on connection
+- **Explicit Classes**: Direct access to `SyncRedisTokenBucket`, `AsyncRedisTokenBucket`, `SyncLocalTokenBucket`, `AsyncLocalTokenBucket`, `SyncRedisSemaphore`, `AsyncRedisSemaphore`, `SyncLocalSemaphore`, and `AsyncLocalSemaphore`
 - **Configurable Token Consumption**: `tokens_to_consume` parameter for variable-cost operations
   - Set at initialization or override dynamically per request: `with bucket(5):`
 - **Customizable Behavior**: Control capacity, refill rates, expiry, max sleep time, and initial state
@@ -394,12 +394,44 @@ async def fetch_bar(id: UUID) -> Bar:
 The semaphore classes are useful when you have concurrency restrictions;
 e.g., say you're allowed 5 active requests at the time for a given API token.
 
-**Note:** Currently, only Redis-based semaphores are available. Local (in-memory) semaphore implementation is planned for a future release.
+Local semaphore implementations are backed by Python concurrency primitives:
+`threading.BoundedSemaphore` for sync code and `asyncio.BoundedSemaphore` for async code.
 
 Beware that the client will block until the Semaphore is acquired,
-or the `max_sleep` limit is exceeded. If the `max_sleep` limit is exceeded, a `MaxSleepExceededError` is raised. Setting `max_sleep` to 0.0 will sleep "endlessly" - default is 30 seconds. On the other hand `expiry` is how long the semaphore will persist in Redis without any activity (acquires or releases). You might need to adjust both to your requirements.
+or the `max_sleep` limit is exceeded. If the `max_sleep` limit is exceeded, a `MaxSleepExceededError` is raised. Setting `max_sleep` to 0.0 will sleep "endlessly" - default is 30 seconds.
 
-Here's how you might use the async version:
+For Redis-backed semaphores, `expiry` controls how long the semaphore keys will persist in Redis without any activity (acquires or releases). You might need to adjust it to your requirements.
+
+> **Note:** The local semaphore implementation does not currently support expiry of semaphore state. Local semaphores persist in memory for the lifetime of the process. If you are creating semaphores dynamically (for example, one semaphore per user or per API key), this could lead to unbounded memory growth. Consider using the Redis-based implementation for applications with dynamic semaphore creation, or ensure semaphores are reused for the same resources.
+
+Here's how you might use the local async version:
+
+```python
+import asyncio
+
+from httpx import AsyncClient
+
+from steindamm import AsyncSemaphore
+
+limiter = AsyncSemaphore(
+    name="foo",
+    capacity=5,
+    max_sleep=30,
+)
+
+async def get_foo():
+    async with AsyncClient() as client:
+        async with limiter:
+            await client.get(...)
+
+
+async def main():
+    await asyncio.gather(
+        get_foo() for i in range(100)
+    )
+```
+
+And here's the Redis-backed async version:
 
 ```python
 import asyncio
@@ -430,7 +462,26 @@ async def main():
     )
 ```
 
-and here is how you might use the sync version:
+And here is how you might use the local sync version:
+
+```python
+import requests
+
+from steindamm import SyncSemaphore
+
+
+limiter = SyncSemaphore(
+    name="foo",
+    capacity=5,
+    max_sleep=30,
+)
+
+def main():
+    with limiter:
+        requests.get(...)
+```
+
+And here is the Redis-backed sync version:
 
 ```python
 import requests

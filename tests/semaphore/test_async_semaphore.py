@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Callable
 from functools import partial
 from typing import Any
 
@@ -24,7 +25,7 @@ from tests.conftest import (
 
 logger = logging.getLogger(__name__)
 
-ConnectionFactory = partial[Redis] | partial[RedisCluster]
+ConnectionFactory = partial[Redis] | partial[RedisCluster] | Callable[[], None]
 
 
 @pytest.mark.parametrize("connection_factory", ASYNC_CONNECTIONS)
@@ -51,8 +52,6 @@ async def test_semaphore_runtimes(
     always take 1 >= seconds to run those.
     """
     connection = await initialize_async_connection(connection_factory())
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
 
     config = SemaphoreConfig(capacity=capacity)
     tasks = [
@@ -73,9 +72,6 @@ async def test_semaphore_runtimes(
 async def test_sleep_is_non_blocking(connection_factory: ConnectionFactory) -> None:
     connection = connection_factory()
 
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
-
     async def _sleep(duration: float) -> None:
         await asyncio.sleep(duration)
 
@@ -93,8 +89,6 @@ async def test_sleep_is_non_blocking(connection_factory: ConnectionFactory) -> N
 @pytest.mark.parametrize("connection_factory", ASYNC_CONNECTIONS)
 def test_repr(connection_factory: ConnectionFactory) -> None:
     connection = connection_factory()
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
     semaphore = async_semaphore_factory(connection=connection, config=SemaphoreConfig(name="test"))
     assert re.match(r"Semaphore instance for queue {limiter}:semaphore:test", str(semaphore))
 
@@ -125,8 +119,6 @@ def test_init_types(
     connection_factory: ConnectionFactory, config_params: dict[str, Any], error: type[ValidationError] | None
 ) -> None:
     connection = connection_factory()
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
     if error:
         with pytest.raises(error):
             async_semaphore_factory(connection=connection, config=SemaphoreConfig(**config_params))
@@ -137,9 +129,6 @@ def test_init_types(
 @pytest.mark.filterwarnings("ignore::RuntimeWarning")
 @pytest.mark.parametrize("connection_factory", ASYNC_CONNECTIONS)
 async def test_max_sleep(connection_factory: ConnectionFactory) -> None:
-    connection = connection_factory()
-    if connection is None:  # TODO: Add support for in-memory semaphore
-        pytest.skip("In-memory connection does not support semaphore")
     config = SemaphoreConfig(max_sleep=1.0)
     with pytest.raises(
         MaxSleepExceededError,
