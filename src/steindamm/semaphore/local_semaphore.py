@@ -1,11 +1,4 @@
-"""
-Synchronous and asynchronous local semaphore implementations.
-
-These implementations provide in-memory concurrency limiting for single-process
-applications. They do not require Redis and are suitable for local development,
-tests, and applications where coordination across multiple processes or machines
-is not needed.
-"""
+"""Synchronous and asynchronous local semaphore implementations."""
 
 import asyncio
 import time
@@ -39,10 +32,15 @@ class SyncLocalSemaphore(SemaphoreBase):
 
     """
 
+    # Class-level storage for semaphore state (shared across instances)
+    # TODO: Currently there's no cleanup of old semaphores.
+    # Consider adding periodic cleanup based on expiry.
     _semaphores: ClassVar[dict[str, BoundedSemaphore]] = {}
     _main_lock: ClassVar[Lock] = Lock()
 
     def _get_semaphore(self) -> BoundedSemaphore:
+        # This is not safe in free threaded python
+        # Not acquiring main lock to improve performance in CPython with GIL
         if self.key not in self._semaphores:
             with self._main_lock:
                 if self.key not in self._semaphores:
@@ -90,11 +88,14 @@ class AsyncLocalSemaphore(SemaphoreBase):
 
     """
 
-    _semaphores: ClassVar[dict[str, asyncio.Semaphore]] = {}
+    # Class-level storage for semaphore state (shared across instances)
+    # TODO: Currently there's no cleanup of old semaphores.
+    # Consider adding periodic cleanup based on expiry.
+    _semaphores: ClassVar[dict[str, asyncio.BoundedSemaphore]] = {}
 
-    def _get_semaphore(self) -> asyncio.Semaphore:
+    def _get_semaphore(self) -> asyncio.BoundedSemaphore:
         if self.key not in self._semaphores:
-            self._semaphores[self.key] = asyncio.Semaphore(self.capacity)
+            self._semaphores[self.key] = asyncio.BoundedSemaphore(self.capacity)
         return self._semaphores[self.key]
 
     async def __aenter__(self) -> None:

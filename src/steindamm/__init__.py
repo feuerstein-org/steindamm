@@ -5,19 +5,28 @@ Use SyncTokenBucket or AsyncTokenBucket to automatically select between Redis-ba
 and local in-memory implementations based on whether a Redis connection is provided.
 
 For explicit control over the implementation, import and use
-the explicit Redis or local classes directly.
+- SyncRedisTokenBucket
+- AsyncRedisTokenBucket
+- SyncLocalTokenBucket
+- AsyncLocalTokenBucket
+- SyncRedisSemaphore
+- AsyncRedisSemaphore
+- SyncLocalSemaphore
+- AsyncLocalSemaphore
+directly.
 """
 
 from typing import Any
 
 from steindamm.exceptions import MaxSleepExceededError, NoTokensAvailableError
 from steindamm.semaphore.local_semaphore import AsyncLocalSemaphore, SyncLocalSemaphore
+from steindamm.semaphore.semaphore import AsyncSemaphore, SyncSemaphore
 from steindamm.token_bucket.local_token_bucket import AsyncLocalTokenBucket, SyncLocalTokenBucket
 from steindamm.token_bucket.token_bucket import AsyncTokenBucket, SyncTokenBucket
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy import for Redis-based classes to avoid requiring redis when not needed."""
+    """Lazy import Redis-based classes to avoid requiring redis when not needed."""
     if name == "AsyncRedisTokenBucket":
         from steindamm.token_bucket.redis_token_bucket import AsyncRedisTokenBucket
 
@@ -34,14 +43,6 @@ def __getattr__(name: str) -> Any:
         from steindamm.semaphore.redis_semaphore import SyncRedisSemaphore
 
         return SyncRedisSemaphore
-    if name == "AsyncSemaphore":
-        from steindamm.semaphore import AsyncSemaphore
-
-        return AsyncSemaphore
-    if name == "SyncSemaphore":
-        from steindamm.semaphore import SyncSemaphore
-
-        return SyncSemaphore
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

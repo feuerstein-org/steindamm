@@ -78,13 +78,13 @@ class SyncSemaphore:
         expiry: int = 60,
         max_sleep: float = 30.0,
         connection: "SyncRedis | SyncRedisCluster | None" = None,
-        **_: object,
     ) -> "SyncRedisSemaphore | SyncLocalSemaphore":
         if connection is not None:
             if not REDIS_AVAILABLE:
                 raise ImportError(
                     "Redis support requires the 'redis' package. Install it with: pip install steindamm[redis]"
                 )
+            # Import only when needed to avoid requiring redis at module load time
             from steindamm.semaphore.redis_semaphore import SyncRedisSemaphore
 
             return SyncRedisSemaphore(
@@ -150,13 +150,13 @@ class AsyncSemaphore:
         expiry: int = 60,
         max_sleep: float = 30.0,
         connection: "AsyncRedis | AsyncRedisCluster | None" = None,
-        **_: object,
     ) -> "AsyncRedisSemaphore | AsyncLocalSemaphore":
         if connection is not None:
             if not REDIS_AVAILABLE:
                 raise ImportError(
                     "Redis support requires the 'redis' package. Install it with: pip install steindamm[redis]"
                 )
+            # Import only when needed to avoid requiring redis at module load time
             from steindamm.semaphore.redis_semaphore import AsyncRedisSemaphore
 
             return AsyncRedisSemaphore(

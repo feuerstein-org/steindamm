@@ -1,10 +1,4 @@
-"""
-Synchronous and asynchronous Redis-backed semaphore implementations.
-
-These implementations use Redis and a Lua script to coordinate semaphore state
-across processes and machines. Both standalone Redis instances and Redis Cluster
-are supported.
-"""
+"""Synchronous and asynchronous Redis-backed semaphore implementations."""
 
 from datetime import datetime
 from logging import getLogger
@@ -33,6 +27,7 @@ class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
         max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
 
     Example:
+
         .. code-block:: python
 
             from redis import Redis  # or from redis.cluster import RedisCluster
@@ -47,8 +42,10 @@ class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
 
     def __enter__(self) -> None:
         """Call the semaphore Lua script to create a semaphore, then call BLPOP to acquire it."""
+        # Retrieve timestamp for when to wake up from Redis
+        # To understand what exists does, check the Lua script
         if self.script(
-            keys=[self.key, self.exists],
+            keys=[self.key, self._exists_key],
             args=[self.capacity],
         ):
             logger.info("Created new semaphore `%s` with capacity %s", self.name, self.capacity)
@@ -60,7 +57,7 @@ class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
         self.connection.blpop([self.key], self.max_sleep)
         pipeline = self.connection.pipeline()
         pipeline.expire(self.key, self.expiry)
-        pipeline.expire(self.exists, self.expiry)
+        pipeline.expire(self._exists_key, self.expiry)
         pipeline.execute()
 
         if 0.0 < self.max_sleep < (datetime.now() - start).total_seconds():
@@ -77,7 +74,7 @@ class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
         pipeline = self.connection.pipeline()
         pipeline.lpush(self.key, 1)
         pipeline.expire(self.key, self.expiry)
-        pipeline.expire(self.exists, self.expiry)
+        pipeline.expire(self._exists_key, self.expiry)
         pipeline.execute()
 
         logger.debug("Released semaphore %s", self.name)
@@ -95,6 +92,7 @@ class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
         max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
 
     Example:
+
         .. code-block:: python
 
             from redis.asyncio import Redis  # or from redis.asyncio.cluster import RedisCluster
@@ -109,8 +107,10 @@ class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
 
     async def __aenter__(self) -> None:
         """Call the semaphore Lua script to create a semaphore, then call BLPOP to acquire it."""
+        # Retrieve timestamp for when to wake up from Redis
+        # To understand what exists does, check the Lua script
         if await self.script(
-            keys=[self.key, self.exists],
+            keys=[self.key, self._exists_key],
             args=[self.capacity],
         ):
             logger.info("Created new semaphore `%s` with capacity %s", self.name, self.capacity)
@@ -122,7 +122,7 @@ class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
         await self.connection.blpop([self.key], self.max_sleep)  # type: ignore[union-attr]
         pipeline: Pipeline | ClusterPipeline = self.connection.pipeline()
         pipeline.expire(self.key, self.expiry)  # type: ignore[union-attr]
-        pipeline.expire(self.exists, self.expiry)  # type: ignore[union-attr]
+        pipeline.expire(self._exists_key, self.expiry)  # type: ignore[union-attr]
         await pipeline.execute()
 
         if 0.0 < self.max_sleep < (datetime.now() - start).total_seconds():
@@ -139,7 +139,7 @@ class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
         pipeline: Pipeline[str] | ClusterPipeline[str] = self.connection.pipeline()
         pipeline.lpush(self.key, 1)  # type: ignore[union-attr]
         pipeline.expire(self.key, self.expiry)  # type: ignore[union-attr]
-        pipeline.expire(self.exists, self.expiry)  # type: ignore[union-attr]
+        pipeline.expire(self._exists_key, self.expiry)  # type: ignore[union-attr]
         await pipeline.execute()
 
         logger.debug("Released semaphore %s", self.name)

@@ -36,7 +36,7 @@ class SemaphoreBase(BaseModel):
         return f"{{limiter}}:semaphore:{self.name}"
 
     @property
-    def exists(self) -> str:
+    def _exists_key(self) -> str:
         """Key to use when checking if the semaphore list has been created or not."""
         return f"{{limiter}}:semaphore:{self.name}-exists"
 
