@@ -46,6 +46,5 @@ def test_redis_cluster(
             name="test",
             capacity=99,
             max_sleep=99,
-            expiry=99,  # pyright: ignore[reportCallIssue]
             connection=connection,  # type: ignore[arg-type]
         )
