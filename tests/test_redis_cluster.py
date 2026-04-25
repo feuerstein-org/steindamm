@@ -40,21 +40,12 @@ def test_redis_cluster(
         # Sync connection
         connection.info()
 
-    semaphore_limiter, token_bucket_limiter = limiters
-
-    semaphore_limiter(
-        name="test",
-        capacity=99,
-        max_sleep=99,
-        expiry=99,
-        connection=connection,  # type: ignore[arg-type]
-    )
-    token_bucket_limiter(
-        name="test",
-        capacity=99,
-        max_sleep=99,
-        expiry=99,
-        refill_frequency=99,
-        refill_amount=99,
-        connection=connection,  # type: ignore[arg-type]
-    )
+    # Test that all limiters can be instantiated with the connection
+    for limiter in limiters:
+        limiter(
+            name="test",
+            capacity=99,
+            max_sleep=99,
+            expiry=99,  # pyright: ignore[reportCallIssue]
+            connection=connection,  # type: ignore[arg-type]
+        )

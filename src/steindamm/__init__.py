@@ -5,15 +5,14 @@ Use SyncTokenBucket or AsyncTokenBucket to automatically select between Redis-ba
 and local in-memory implementations based on whether a Redis connection is provided.
 
 For explicit control over the implementation, import and use
-- SyncRedisTokenBucket
-- AsyncRedisTokenBucket
-- SyncLocalTokenBucket
-- AsyncLocalTokenBucket
-- SyncRedisSemaphore
-- AsyncRedisSemaphore
-- SyncLocalSemaphore
-- AsyncLocalSemaphore
-directly.
+ - SyncRedisTokenBucket
+ - AsyncRedisTokenBucket
+ - SyncLocalTokenBucket
+ - AsyncLocalTokenBucket
+ - SyncRedisSemaphore
+ - AsyncRedisSemaphore
+ - SyncLocalSemaphore
+ - AsyncLocalSemaphore
 """
 
 from typing import Any
