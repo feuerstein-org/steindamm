@@ -105,18 +105,18 @@ class MockTokenBucketConfig:
 
 def sync_tokenbucket_factory(
     *, connection: SyncRedis | SyncRedisCluster | None, config: MockTokenBucketConfig
-) -> SyncRedisTokenBucket | SyncLocalTokenBucket:
-    """Create a SyncTokenBucket or SyncRedisTokenBucket if connection was provided."""
-    return SyncTokenBucket(connection=connection, **asdict(config))
+) -> SyncTokenBucket:
+    """Create a SyncLocalTokenBucket or SyncRedisTokenBucket if connection was provided."""
+    return SyncTokenBucket.create(connection=connection, **asdict(config))
 
 
 def async_tokenbucket_factory(
     *,
     connection: AsyncRedis | AsyncRedisCluster | None,
     config: MockTokenBucketConfig,
-) -> AsyncRedisTokenBucket | AsyncLocalTokenBucket:
-    """Create a AsyncTokenBucket or AsyncRedisTokenBucket if connection was provided."""
-    return AsyncTokenBucket(connection=connection, **asdict(config))
+) -> AsyncTokenBucket:
+    """Create an AsyncLocalTokenBucket or AsyncRedisTokenBucket if connection was provided."""
+    return AsyncTokenBucket.create(connection=connection, **asdict(config))
 
 
 @dataclass
@@ -131,19 +131,19 @@ class SemaphoreConfig:
 
 def sync_semaphore_factory(
     *, connection: SyncRedis | SyncRedisCluster | None, config: SemaphoreConfig | None = None
-) -> SyncRedisSemaphore | SyncLocalSemaphore:
+) -> SyncSemaphore:
     """Create a SyncSemaphore using Redis or local in-memory backend."""
     if config is None:
         config = SemaphoreConfig()
 
-    return SyncSemaphore(connection=connection, **asdict(config))
+    return SyncSemaphore.create(connection=connection, **asdict(config))
 
 
 def async_semaphore_factory(
     *, connection: AsyncRedis | AsyncRedisCluster | None, config: SemaphoreConfig | None = None
-) -> AsyncRedisSemaphore | AsyncLocalSemaphore:
+) -> AsyncSemaphore:
     """Create an AsyncSemaphore using Redis or local in-memory backend."""
     if config is None:
         config = SemaphoreConfig()
 
-    return AsyncSemaphore(connection=connection, **asdict(config))
+    return AsyncSemaphore.create(connection=connection, **asdict(config))

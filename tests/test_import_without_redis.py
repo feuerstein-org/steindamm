@@ -61,21 +61,21 @@ from steindamm import (
 )
 
 # Test creating a local token bucket
-async_bucket = AsyncTokenBucket(name="test_bucket", capacity=10)
+async_bucket = AsyncTokenBucket.create(name="test_bucket", capacity=10)
 assert type(async_bucket).__name__ == "AsyncLocalTokenBucket", (
     f"Expected AsyncLocalTokenBucket, got {type(async_bucket).__name__}"
 )
 
 # Test creating a sync local token bucket
-sync_bucket = SyncTokenBucket(name="test_sync", capacity=5)
+sync_bucket = SyncTokenBucket.create(name="test_sync", capacity=5)
 assert type(sync_bucket).__name__ == "SyncLocalTokenBucket", f"Expected SyncLocalTokenBucket, got {type(sync_bucket).__name__}"
 
 # Test creating local semaphores directly and via factory
-async_semaphore = AsyncSemaphore(name="test_async_semaphore", capacity=2)
+async_semaphore = AsyncSemaphore.create(name="test_async_semaphore", capacity=2)
 assert type(async_semaphore).__name__ == "AsyncLocalSemaphore", (
     f"Expected AsyncLocalSemaphore, got {type(async_semaphore).__name__}"
 )
-sync_semaphore = SyncSemaphore(name="test_sync_semaphore", capacity=2)
+sync_semaphore = SyncSemaphore.create(name="test_sync_semaphore", capacity=2)
 assert type(sync_semaphore).__name__ == "SyncLocalSemaphore", (
     f"Expected SyncLocalSemaphore, got {type(sync_semaphore).__name__}"
 )
@@ -191,10 +191,10 @@ sys.meta_path.insert(0, RedisImportBlocker())
 from steindamm import AsyncSemaphore, AsyncTokenBucket, SyncSemaphore, SyncTokenBucket
 
 # Create instances - should use local implementations
-async_bucket = AsyncTokenBucket(name="async_test", capacity=10)
-sync_bucket = SyncTokenBucket(name="sync_test", capacity=5)
-async_semaphore = AsyncSemaphore(name="async_semaphore_test", capacity=2)
-sync_semaphore = SyncSemaphore(name="sync_semaphore_test", capacity=2)
+async_bucket = AsyncTokenBucket.create(name="async_test", capacity=10)
+sync_bucket = SyncTokenBucket.create(name="sync_test", capacity=5)
+async_semaphore = AsyncSemaphore.create(name="async_semaphore_test", capacity=2)
+sync_semaphore = SyncSemaphore.create(name="sync_semaphore_test", capacity=2)
 
 # Verify they're local implementations
 assert type(async_bucket).__name__ == "AsyncLocalTokenBucket"

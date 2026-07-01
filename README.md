@@ -28,7 +28,7 @@ We currently support Python 3.11, 3.12, and 3.13.
 - Context manager interface (`with` / `async with`)
 
 ### Flexibility & Control
-- **Factory Classes**: `SyncTokenBucket`, `AsyncTokenBucket`, `SyncSemaphore`, and `AsyncSemaphore` automatically choose implementation based on connection
+- **Base Classes with a Factory**: `SyncTokenBucket`, `AsyncTokenBucket`, `SyncSemaphore`, and `AsyncSemaphore` are the base classes the concrete backends inherit from (use them for type hints / `isinstance`). Call `.create(...)` on any of them to automatically choose the Redis or local implementation based on `connection`
 - **Explicit Classes**: Direct access to `SyncRedisTokenBucket`, `AsyncRedisTokenBucket`, `SyncLocalTokenBucket`, `AsyncLocalTokenBucket`, `SyncRedisSemaphore`, `AsyncRedisSemaphore`, `SyncLocalSemaphore`, and `AsyncLocalSemaphore`
 - **Configurable Token Consumption**: `tokens_to_consume` parameter for variable-cost operations
   - Set at initialization or override dynamically per request: `with bucket(5):`
@@ -79,7 +79,7 @@ from httpx import AsyncClient
 from steindamm import AsyncTokenBucket
 
 # No Redis connection needed - runs in-memory
-limiter = AsyncTokenBucket(
+limiter = AsyncTokenBucket.create(
     name="foo",                # name of the resource you are limiting traffic for
     capacity=5,                # hold up to 5 tokens (default: 5.0)
     refill_frequency=1,        # add tokens every second (default: 1.0)
@@ -108,7 +108,7 @@ import requests
 
 from steindamm import SyncTokenBucket
 
-limiter = SyncTokenBucket(
+limiter = SyncTokenBucket.create(
     name="foo",
     capacity=5,
     refill_frequency=1,
@@ -137,7 +137,7 @@ from redis.asyncio import Redis
 from steindamm import AsyncTokenBucket
 
 # With Redis connection - distributed across processes/servers
-limiter = AsyncTokenBucket(
+limiter = AsyncTokenBucket.create(
     connection=Redis.from_url("redis://localhost:6379"),  # Add Redis connection for distributed limiting
     name="foo",
     capacity=5,
@@ -169,7 +169,7 @@ from redis import Redis
 from steindamm import SyncTokenBucket
 
 
-limiter = SyncTokenBucket(
+limiter = SyncTokenBucket.create(
     connection=Redis.from_url("redis://localhost:6379"),
     name="foo",
     capacity=5,
@@ -212,10 +212,10 @@ You can control how many tokens are consumed per operation using the `tokens_to_
 from steindamm import SyncTokenBucket
 
 # Small requests consume 1 token
-small_limiter = SyncTokenBucket(name="api", capacity=100, tokens_to_consume=1)
+small_limiter = SyncTokenBucket.create(name="api", capacity=100, tokens_to_consume=1)
 
 # Large requests consume 5 tokens
-large_limiter = SyncTokenBucket(name="api", capacity=100, tokens_to_consume=5)
+large_limiter = SyncTokenBucket.create(name="api", capacity=100, tokens_to_consume=5)
 
 with small_limiter:
     make_small_request()  # Consumes 1 token
@@ -234,7 +234,7 @@ You can override the `tokens_to_consume` value on a per-request basis by calling
 from steindamm import SyncTokenBucket
 
 # Create a single bucket with default tokens_to_consume=1
-limiter = SyncTokenBucket(name="api", capacity=100, tokens_to_consume=1)
+limiter = SyncTokenBucket.create(name="api", capacity=100, tokens_to_consume=1)
 
 with limiter:
     make_small_request()  # Uses default: consumes 1 token
@@ -254,7 +254,7 @@ This works for all token bucket implementations (sync/async, Redis/local):
 ```python
 from steindamm import AsyncTokenBucket
 
-async_limiter = AsyncTokenBucket(name="api", capacity=100)
+async_limiter = AsyncTokenBucket.create(name="api", capacity=100)
 
 async with async_limiter:
     await make_small_request()  # Default: 1 token
@@ -271,7 +271,7 @@ You can create a token bucket that never refills by setting both `refill_amount`
 from steindamm import SyncTokenBucket, NoTokensAvailableError
 
 # Create a bucket with a fixed quota of 100 tokens
-limiter = SyncTokenBucket(
+limiter = SyncTokenBucket.create(
     name="api-quota",
     capacity=100,
     refill_frequency=0,  # Never refill
@@ -311,7 +311,7 @@ now = datetime.now(timezone.utc)
 hour_start = now.replace(minute=0, second=0, microsecond=0)
 
 # Create a bucket that refills at the top of each hour
-limiter = SyncTokenBucket(
+limiter = SyncTokenBucket.create(
     name="hourly-api",
     capacity=100,
     refill_frequency=3600,     # 1 hour in seconds
@@ -332,7 +332,7 @@ from datetime import datetime, timezone
 now = datetime.now(timezone.utc)
 midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-limiter = SyncTokenBucket(
+limiter = SyncTokenBucket.create(
     name="daily-api",
     capacity=1000,
     refill_frequency=86400,    # 24 hours in seconds
@@ -361,7 +361,7 @@ from redis.asyncio import Redis
 def limit(name, capacity, connection):
   def middle(f):
     async def inner(*args, **kwargs):
-      async with AsyncSemaphore(connection=connection, name=name, capacity=capacity):
+      async with AsyncSemaphore.create(connection=connection, name=name, capacity=capacity):
         return await f(*args, **kwargs)
     return inner
   return middle
@@ -372,7 +372,7 @@ from steindamm import AsyncTokenBucket
 def rate_limit(name, capacity):
   def middle(f):
     async def inner(*args, **kwargs):
-      async with AsyncTokenBucket(name=name, capacity=capacity):
+      async with AsyncTokenBucket.create(name=name, capacity=capacity):
         return await f(*args, **kwargs)
     return inner
   return middle
@@ -413,7 +413,7 @@ from httpx import AsyncClient
 
 from steindamm import AsyncSemaphore
 
-limiter = AsyncSemaphore(
+limiter = AsyncSemaphore.create(
     name="foo",
     capacity=5,
     max_sleep=30,
@@ -442,7 +442,7 @@ from redis.asyncio import Redis
 from steindamm import AsyncSemaphore
 
 # All properties have defaults except name and connection
-limiter = AsyncSemaphore(
+limiter = AsyncSemaphore.create(
     connection=Redis.from_url("redis://localhost:6379"),
     name="foo",    # name of the resource you are limiting traffic for
     capacity=5,    # allow 5 concurrent requests (default: 5)
@@ -470,7 +470,7 @@ import requests
 from steindamm import SyncSemaphore
 
 
-limiter = SyncSemaphore(
+limiter = SyncSemaphore.create(
     name="foo",
     capacity=5,
     max_sleep=30,
@@ -490,7 +490,7 @@ from redis import Redis
 from steindamm import SyncSemaphore
 
 
-limiter = SyncSemaphore(
+limiter = SyncSemaphore.create(
     connection=Redis.from_url("redis://localhost:6379"),
     name="foo",
     capacity=5,

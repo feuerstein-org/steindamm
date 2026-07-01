@@ -23,27 +23,39 @@ class TestSyncTokenBucketFactory:
 
     def test_returns_local_bucket_when_no_connection(self) -> None:
         """Test that SyncTokenBucket returns SyncLocalTokenBucket when connection is None."""
-        bucket = SyncTokenBucket(name="test", capacity=10)
+        bucket = SyncTokenBucket.create(name="test", capacity=10)
         assert isinstance(bucket, SyncLocalTokenBucket)
         assert not isinstance(bucket, SyncRedisTokenBucket)
+
+    def test_concrete_buckets_are_instances_of_base(self) -> None:
+        """Both backends subclass SyncTokenBucket, so it works for isinstance and annotations."""
+        local = SyncTokenBucket.create(name="test", capacity=10)
+        assert isinstance(local, SyncTokenBucket)
+        assert issubclass(SyncLocalTokenBucket, SyncTokenBucket)
+        assert issubclass(SyncRedisTokenBucket, SyncTokenBucket)
+
+    def test_abstract_base_cannot_be_instantiated_directly(self) -> None:
+        """Instantiating the abstract base points the caller at create()."""
+        with pytest.raises(TypeError, match=r"SyncTokenBucket is an abstract base class"):
+            SyncTokenBucket(name="test", capacity=10)
 
     def test_returns_redis_bucket_with_standalone_connection(self) -> None:
         """Test that SyncTokenBucket returns SyncRedisTokenBucket with Redis connection."""
         connection = STANDALONE_SYNC_CONNECTION()
-        bucket = SyncTokenBucket(connection=connection, name="test", capacity=10)
+        bucket = SyncTokenBucket.create(connection=connection, name="test", capacity=10)
         assert isinstance(bucket, SyncRedisTokenBucket)
         assert not isinstance(bucket, SyncLocalTokenBucket)
 
     def test_returns_redis_bucket_with_cluster_connection(self) -> None:
         """Test that SyncTokenBucket returns SyncRedisTokenBucket with RedisCluster connection."""
         connection = CLUSTER_SYNC_CONNECTION()
-        bucket = SyncTokenBucket(connection=connection, name="test", capacity=10)
+        bucket = SyncTokenBucket.create(connection=connection, name="test", capacity=10)
         assert isinstance(bucket, SyncRedisTokenBucket)
         assert not isinstance(bucket, SyncLocalTokenBucket)
 
     def test_passes_args_to_local_bucket(self) -> None:
         """Test that all kwargs are passed correctly to SyncLocalTokenBucket."""
-        bucket = SyncTokenBucket(
+        bucket = SyncTokenBucket.create(
             name="test_bucket",
             capacity=100,
             refill_frequency=2.0,
@@ -66,7 +78,7 @@ class TestSyncTokenBucketFactory:
     def test_passes_args_to_redis_bucket(self) -> None:
         """Test that all kwargs are passed correctly to SyncRedisTokenBucket."""
         connection = STANDALONE_SYNC_CONNECTION()
-        bucket = SyncTokenBucket(
+        bucket = SyncTokenBucket.create(
             connection=connection,
             name="test_bucket",
             capacity=100,
@@ -99,7 +111,7 @@ class TestSyncTokenBucketFactory:
             ImportError,
             match=r"Redis support requires the 'redis' package\. Install it with: pip install steindamm\[redis\]",
         ):
-            SyncTokenBucket(connection=connection, name="test", capacity=10)
+            SyncTokenBucket.create(connection=connection, name="test", capacity=10)
 
 
 class TestAsyncTokenBucketFactory:
@@ -107,27 +119,39 @@ class TestAsyncTokenBucketFactory:
 
     def test_returns_local_bucket_when_no_connection(self) -> None:
         """Test that AsyncTokenBucket returns AsyncLocalTokenBucket when connection is None."""
-        bucket = AsyncTokenBucket(name="test", capacity=10)
+        bucket = AsyncTokenBucket.create(name="test", capacity=10)
         assert isinstance(bucket, AsyncLocalTokenBucket)
         assert not isinstance(bucket, AsyncRedisTokenBucket)
+
+    def test_concrete_buckets_are_instances_of_base(self) -> None:
+        """Both backends subclass AsyncTokenBucket, so it works for isinstance and annotations."""
+        local = AsyncTokenBucket.create(name="test", capacity=10)
+        assert isinstance(local, AsyncTokenBucket)
+        assert issubclass(AsyncLocalTokenBucket, AsyncTokenBucket)
+        assert issubclass(AsyncRedisTokenBucket, AsyncTokenBucket)
+
+    def test_abstract_base_cannot_be_instantiated_directly(self) -> None:
+        """Instantiating the abstract base points the caller at create()."""
+        with pytest.raises(TypeError, match=r"AsyncTokenBucket is an abstract base class"):
+            AsyncTokenBucket(name="test", capacity=10)
 
     def test_returns_redis_bucket_with_standalone_connection(self) -> None:
         """Test that AsyncTokenBucket returns AsyncRedisTokenBucket with async Redis connection."""
         connection = STANDALONE_ASYNC_CONNECTION()
-        bucket = AsyncTokenBucket(connection=connection, name="test", capacity=10)
+        bucket = AsyncTokenBucket.create(connection=connection, name="test", capacity=10)
         assert isinstance(bucket, AsyncRedisTokenBucket)
         assert not isinstance(bucket, AsyncLocalTokenBucket)
 
     def test_returns_redis_bucket_with_cluster_connection(self) -> None:
         """Test that AsyncTokenBucket returns AsyncRedisTokenBucket with async RedisCluster connection."""
         connection = CLUSTER_ASYNC_CONNECTION()
-        bucket = AsyncTokenBucket(connection=connection, name="test", capacity=10)
+        bucket = AsyncTokenBucket.create(connection=connection, name="test", capacity=10)
         assert isinstance(bucket, AsyncRedisTokenBucket)
         assert not isinstance(bucket, AsyncLocalTokenBucket)
 
     def test_passes_kwargs_to_local_bucket(self) -> None:
         """Test that all kwargs are passed correctly to AsyncLocalTokenBucket."""
-        bucket = AsyncTokenBucket(
+        bucket = AsyncTokenBucket.create(
             name="test_bucket",
             capacity=100,
             refill_frequency=2.0,
@@ -150,7 +174,7 @@ class TestAsyncTokenBucketFactory:
     def test_passes_kwargs_to_redis_bucket(self) -> None:
         """Test that all kwargs are passed correctly to AsyncRedisTokenBucket."""
         connection = STANDALONE_ASYNC_CONNECTION()
-        bucket = AsyncTokenBucket(
+        bucket = AsyncTokenBucket.create(
             connection=connection,
             name="test_bucket",
             capacity=100,
@@ -183,4 +207,4 @@ class TestAsyncTokenBucketFactory:
             ImportError,
             match=r"Redis support requires the 'redis' package\. Install it with: pip install steindamm\[redis\]",
         ):
-            AsyncTokenBucket(connection=connection, name="test", capacity=10)
+            AsyncTokenBucket.create(connection=connection, name="test", capacity=10)

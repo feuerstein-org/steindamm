@@ -1,27 +1,41 @@
 """
-Factory classes for creating semaphore instances.
+Public base classes for semaphore limiters.
 
-Each class will use a semaphore running locally unless a "connection"
-parameter is provided for the Redis server/cluster.
+`SyncSemaphore` and `AsyncSemaphore` are the base classes that both the local
+(in-memory) and the Redis-backed semaphores inherit from. Because the concrete
+implementations are real subclasses, you can use these names as type annotations
+and in ``isinstance`` checks:
 
-You can also use the respective semaphore classes directly.
- - SyncLocalSemaphore
- - AsyncLocalSemaphore
- - SyncRedisSemaphore
- - AsyncRedisSemaphore
+.. code-block:: python
+
+    def build() -> SyncSemaphore:
+        return SyncSemaphore.create(name="api", capacity=5)
+
+    assert isinstance(build(), SyncSemaphore)
+
+To construct a semaphore, use the :meth:`create` classmethod. It selects the
+implementation based on whether a Redis ``connection`` is provided:
+
+.. code-block:: python
+
+    semaphore = SyncSemaphore.create(name="api", capacity=5)            # local
+    semaphore = SyncSemaphore.create(connection=redis, name="api")      # redis
+
+You can also import and instantiate the concrete classes directly:
+ - SyncLocalSemaphore / AsyncLocalSemaphore
+ - SyncRedisSemaphore / AsyncRedisSemaphore
 """
 
-from typing import TYPE_CHECKING
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Self
 
-from steindamm.semaphore.local_semaphore import AsyncLocalSemaphore, SyncLocalSemaphore
+from steindamm.semaphore.semaphore_base import SemaphoreBase
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
     from redis.asyncio import Redis as AsyncRedis
     from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
     from redis.cluster import RedisCluster as SyncRedisCluster
-
-    from steindamm.semaphore.redis_semaphore import AsyncRedisSemaphore, SyncRedisSemaphore
 
 
 try:
@@ -32,58 +46,63 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 
-class SyncSemaphore:
+_REDIS_IMPORT_ERROR = "Redis support requires the 'redis' package. Install it with: pip install steindamm[redis]"
+
+
+# Defaults are defined here and in SemaphoreBase to help with typehints - keep them in sync
+class SyncSemaphore(SemaphoreBase):
     """
-    Factory class for creating synchronous semaphore instances.
+    Base class for synchronous semaphores.
 
-    Automatically selects the appropriate implementation:
-    - If `connection` is provided: uses Redis-backed semaphore (SyncRedisSemaphore)
-    - If `connection` is None: uses local in-memory semaphore (SyncLocalSemaphore)
+    This is an abstract base: instantiate a concrete semaphore with :meth:`create`
+    (which selects a Redis or local backend based on ``connection``), or import
+    ``SyncLocalSemaphore`` / ``SyncRedisSemaphore`` and construct them directly.
+    Subclasses implement the context-manager protocol.
 
-    You can also import SyncRedisSemaphore or SyncLocalSemaphore directly.
-
-    Args:
-        name: Unique identifier for this semaphore.
-        capacity: Maximum number of concurrent holders allowed.
-        expiry: Key expiry time in seconds - currently not implemented for local semaphores.
-        max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
-        connection: Optional Redis connection (SyncRedis or SyncRedisCluster).
-            If provided, uses Redis-based implementation; otherwise uses local in-memory.
-
-    Examples:
-        Local in-memory semaphore (no Redis required):
-
+    Example:
         .. code-block:: python
 
-            semaphore = SyncSemaphore(name="api", capacity=5)
-            with semaphore:
-                make_api_call()
-
-        Redis-based semaphore:
-
-        .. code-block:: python
-
-            from redis import Redis  # or from redis.cluster import RedisCluster
-            redis_conn = Redis(host='localhost', port=6379)
-            semaphore = SyncSemaphore(connection=redis_conn, name="api", capacity=5)
+            semaphore = SyncSemaphore.create(name="api", capacity=5)
             with semaphore:
                 make_api_call()
 
     """
 
-    def __new__(  # noqa: D102
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        """Guard against instantiating the abstract base directly; use create() instead."""
+        if cls is SyncSemaphore:
+            raise TypeError(
+                "SyncSemaphore is an abstract base class - call SyncSemaphore.create(...) to build a semaphore, "
+                "or instantiate SyncLocalSemaphore / SyncRedisSemaphore directly."
+            )
+        return super().__new__(cls)
+
+    @classmethod
+    def create(
         cls,
         name: str,
         capacity: int = 5,
         expiry: int = 60,
         max_sleep: float = 30.0,
         connection: "SyncRedis | SyncRedisCluster | None" = None,
-    ) -> "SyncRedisSemaphore | SyncLocalSemaphore":
+    ) -> "SyncSemaphore":
+        """
+        Create a semaphore, selecting the backend from ``connection``.
+
+        - If ``connection`` is provided: returns a ``SyncRedisSemaphore``.
+        - If ``connection`` is None: returns a ``SyncLocalSemaphore``.
+
+        Args:
+            name: Unique identifier for this semaphore.
+            capacity: Maximum number of concurrent holders allowed.
+            expiry: Key expiry time in seconds - currently not implemented for local semaphores.
+            max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
+            connection: Optional Redis connection (SyncRedis or SyncRedisCluster).
+
+        """
         if connection is not None:
             if not REDIS_AVAILABLE:
-                raise ImportError(
-                    "Redis support requires the 'redis' package. Install it with: pip install steindamm[redis]"
-                )
+                raise ImportError(_REDIS_IMPORT_ERROR)
             # Import only when needed to avoid requiring redis at module load time
             from steindamm.semaphore.redis_semaphore import SyncRedisSemaphore
 
@@ -94,6 +113,7 @@ class SyncSemaphore:
                 expiry=expiry,
                 max_sleep=max_sleep,
             )
+        from steindamm.semaphore.local_semaphore import SyncLocalSemaphore
 
         return SyncLocalSemaphore(
             name=name,
@@ -102,60 +122,73 @@ class SyncSemaphore:
             max_sleep=max_sleep,
         )
 
+    def __enter__(self) -> None:
+        """Acquire a semaphore slot, blocking until one is available."""
+        raise NotImplementedError
 
-class AsyncSemaphore:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        raise NotImplementedError
+
+
+# Defaults are defined here and in SemaphoreBase to help with typehints - keep them in sync
+class AsyncSemaphore(SemaphoreBase):
     """
-    Factory class for creating asynchronous semaphore instances.
+    Base class for asynchronous semaphores.
 
-    Automatically selects the appropriate implementation:
-    - If `connection` is provided: uses Redis-backed semaphore (AsyncRedisSemaphore)
-    - If `connection` is None: uses local in-memory semaphore (AsyncLocalSemaphore)
+    This is an abstract base: instantiate a concrete semaphore with :meth:`create`
+    (which selects a Redis or local backend based on ``connection``), or import
+    ``AsyncLocalSemaphore`` / ``AsyncRedisSemaphore`` and construct them directly.
+    Subclasses implement the context-manager protocol.
 
-    For explicit control over the implementation, import and use
-    AsyncRedisSemaphore or AsyncLocalSemaphore directly.
-
-    Args:
-        name: Unique identifier for this semaphore.
-        capacity: Maximum number of concurrent holders allowed.
-        expiry: Key expiry time in seconds - currently not implemented for local semaphores.
-        max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
-        connection: Optional async Redis connection (AsyncRedis or AsyncRedisCluster).
-            If provided, uses Redis-based implementation; otherwise uses local in-memory.
-
-    Examples:
-        Local in-memory async semaphore:
-
+    Example:
         .. code-block:: python
 
-            semaphore = AsyncSemaphore(name="api", capacity=5)
-            async with semaphore:
-                await make_api_call()
-
-        Redis-based async semaphore:
-
-        .. code-block:: python
-
-            from redis.asyncio import Redis
-            redis_conn = Redis(host='localhost', port=6379)
-            semaphore = AsyncSemaphore(connection=redis_conn, name="api", capacity=5)
+            semaphore = AsyncSemaphore.create(name="api", capacity=5)
             async with semaphore:
                 await make_api_call()
 
     """
 
-    def __new__(  # noqa: D102
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        """Guard against instantiating the abstract base directly; use create() instead."""
+        if cls is AsyncSemaphore:
+            raise TypeError(
+                "AsyncSemaphore is an abstract base class - call AsyncSemaphore.create(...) to build a semaphore, "
+                "or instantiate AsyncLocalSemaphore / AsyncRedisSemaphore directly."
+            )
+        return super().__new__(cls)
+
+    @classmethod
+    def create(
         cls,
         name: str,
         capacity: int = 5,
         expiry: int = 60,
         max_sleep: float = 30.0,
         connection: "AsyncRedis | AsyncRedisCluster | None" = None,
-    ) -> "AsyncRedisSemaphore | AsyncLocalSemaphore":
+    ) -> "AsyncSemaphore":
+        """
+        Create a semaphore, selecting the backend from ``connection``.
+
+        - If ``connection`` is provided: returns an ``AsyncRedisSemaphore``.
+        - If ``connection`` is None: returns an ``AsyncLocalSemaphore``.
+
+        Args:
+            name: Unique identifier for this semaphore.
+            capacity: Maximum number of concurrent holders allowed.
+            expiry: Key expiry time in seconds - currently not implemented for local semaphores.
+            max_sleep: Maximum seconds to wait for a slot. 0 means wait indefinitely.
+            connection: Optional async Redis connection (AsyncRedis or AsyncRedisCluster).
+
+        """
         if connection is not None:
             if not REDIS_AVAILABLE:
-                raise ImportError(
-                    "Redis support requires the 'redis' package. Install it with: pip install steindamm[redis]"
-                )
+                raise ImportError(_REDIS_IMPORT_ERROR)
             # Import only when needed to avoid requiring redis at module load time
             from steindamm.semaphore.redis_semaphore import AsyncRedisSemaphore
 
@@ -166,6 +199,7 @@ class AsyncSemaphore:
                 expiry=expiry,
                 max_sleep=max_sleep,
             )
+        from steindamm.semaphore.local_semaphore import AsyncLocalSemaphore
 
         return AsyncLocalSemaphore(
             name=name,
@@ -173,3 +207,15 @@ class AsyncSemaphore:
             expiry=expiry,
             max_sleep=max_sleep,
         )
+
+    async def __aenter__(self) -> None:
+        """Acquire a semaphore slot, blocking until one is available."""
+        raise NotImplementedError
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        raise NotImplementedError

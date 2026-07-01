@@ -7,10 +7,10 @@ from types import TracebackType
 from typing import ClassVar
 
 from steindamm.exceptions import MaxSleepExceededError
-from steindamm.semaphore.semaphore_base import SemaphoreBase
+from steindamm.semaphore.semaphore import AsyncSemaphore, SyncSemaphore
 
 
-class SyncLocalSemaphore(SemaphoreBase):
+class SyncLocalSemaphore(SyncSemaphore):
     """
     Synchronous local semaphore.
 
@@ -66,7 +66,7 @@ class SyncLocalSemaphore(SemaphoreBase):
         self._get_semaphore().release()
 
 
-class AsyncLocalSemaphore(SemaphoreBase):
+class AsyncLocalSemaphore(AsyncSemaphore):
     """
     Asynchronous local semaphore.
 

@@ -10,12 +10,12 @@ from redis.asyncio.cluster import ClusterPipeline
 
 from steindamm.base import AsyncLuaScriptBase, SyncLuaScriptBase
 from steindamm.exceptions import MaxSleepExceededError
-from steindamm.semaphore.semaphore_base import SemaphoreBase
+from steindamm.semaphore.semaphore import AsyncSemaphore, SyncSemaphore
 
 logger = getLogger(__name__)
 
 
-class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
+class SyncRedisSemaphore(SyncSemaphore, SyncLuaScriptBase):
     """
     Synchronous Redis-backed semaphore.
 
@@ -80,7 +80,7 @@ class SyncRedisSemaphore(SemaphoreBase, SyncLuaScriptBase):
         logger.debug("Released semaphore %s", self.name)
 
 
-class AsyncRedisSemaphore(SemaphoreBase, AsyncLuaScriptBase):
+class AsyncRedisSemaphore(AsyncSemaphore, AsyncLuaScriptBase):
     """
     Asynchronous Redis-backed semaphore.
 

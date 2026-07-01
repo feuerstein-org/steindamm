@@ -1,16 +1,13 @@
 """Synchronous and Asynchronous Redis-backed (Standalone or Cluster) token bucket implementations."""
 
-import asyncio
-import time
-from types import TracebackType
 from typing import ClassVar, cast
 
 from steindamm.base import AsyncLuaScriptBase, SyncLuaScriptBase
 from steindamm.exceptions import NoTokensAvailableError
-from steindamm.token_bucket.token_bucket_base import TokenBucketBase
+from steindamm.token_bucket.token_bucket import AsyncTokenBucket, SyncTokenBucket
 
 
-class SyncRedisTokenBucket(TokenBucketBase, SyncLuaScriptBase):
+class SyncRedisTokenBucket(SyncTokenBucket, SyncLuaScriptBase):
     """
     Synchronous Redis-backed (Standalone or Cluster) token bucket.
 
@@ -38,44 +35,10 @@ class SyncRedisTokenBucket(TokenBucketBase, SyncLuaScriptBase):
 
     script_name: ClassVar[str] = "token_bucket/token_bucket.lua"
 
-    def __call__(self, tokens_to_consume: float | None = None) -> "SyncRedisTokenBucket":
-        """
-        Context manager with custom tokens_to_consume value.
-
-        Args:
-            tokens_to_consume: Number of tokens to consume. If None, uses the instance's
-                tokens_to_consume value set during initialization.
-
-        Example:
-            .. code-block:: python
-
-                bucket = SyncRedisTokenBucket(connection=redis_conn, name="api", capacity=10)
-                # Consume 1 token (default)
-                with bucket:
-                    make_small_request()
-                # Consume 5 tokens
-                with bucket(5):
-                    make_large_request()
-
-        """
-        self._temp_tokens_to_consume = tokens_to_consume
-        return self
-
-    def __enter__(self) -> None:
-        """Acquire token(s) from the token bucket and sleep until they are available."""
-        # Use temporary value if set by __call__, otherwise use instance default
-        tokens_needed = (
-            self._temp_tokens_to_consume if self._temp_tokens_to_consume is not None else self.tokens_to_consume
-        )
-
-        if tokens_needed == 0:
-            return
-
-        # Clear temporary value
-        self._temp_tokens_to_consume = None
-
+    def _acquire_slot(self, tokens_needed: float) -> float:
+        """Run the Lua token-bucket script and return the slot timestamp in milliseconds."""
         try:
-            timestamp: float = cast(
+            return cast(
                 float,
                 self.script(
                     keys=[self.key],
@@ -91,10 +54,6 @@ class SyncRedisTokenBucket(TokenBucketBase, SyncLuaScriptBase):
                     ],
                 ),
             )
-
-            # Parse timestamp
-            sleep_time = self.parse_timestamp(timestamp)
-
         except Exception as e:
             error_msg = str(e)
             # Lua script will return exception if max_sleep is exceeded
@@ -120,22 +79,8 @@ class SyncRedisTokenBucket(TokenBucketBase, SyncLuaScriptBase):
                 ) from None
             raise
 
-        # Sleep before returning
-        if sleep_time == 0:
-            return
 
-        time.sleep(sleep_time)
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        return
-
-
-class AsyncRedisTokenBucket(TokenBucketBase, AsyncLuaScriptBase):
+class AsyncRedisTokenBucket(AsyncTokenBucket, AsyncLuaScriptBase):
     """
     Asynchronous Redis-backed (Standalone or Cluster) token bucket.
 
@@ -163,44 +108,10 @@ class AsyncRedisTokenBucket(TokenBucketBase, AsyncLuaScriptBase):
 
     script_name: ClassVar[str] = "token_bucket/token_bucket.lua"
 
-    def __call__(self, tokens_to_consume: float | None = None) -> "AsyncRedisTokenBucket":
-        """
-        Context manager with custom tokens_to_consume value.
-
-        Args:
-            tokens_to_consume: Number of tokens to consume. If None, uses the instance's
-                tokens_to_consume value set during initialization.
-
-        Example:
-            .. code-block:: python
-
-                bucket = AsyncRedisTokenBucket(connection=redis_conn, name="api", capacity=10)
-                # Consume 1 token (default)
-                async with bucket:
-                    await make_small_request()
-                # Consume 5 tokens
-                async with bucket(5):
-                    await make_large_request()
-
-        """
-        self._temp_tokens_to_consume = tokens_to_consume
-        return self
-
-    async def __aenter__(self) -> None:
-        """Acquire token(s) from the token bucket and sleep until they are available."""
-        # Use temporary value if set by __call__, otherwise use instance default
-        tokens_needed = (
-            self._temp_tokens_to_consume if self._temp_tokens_to_consume is not None else self.tokens_to_consume
-        )
-
-        if tokens_needed == 0:
-            return
-
-        # Clear temporary value
-        self._temp_tokens_to_consume = None
-
+    async def _acquire_slot(self, tokens_needed: float) -> float:
+        """Run the Lua token-bucket script and return the slot timestamp in milliseconds."""
         try:
-            timestamp: float = cast(
+            return cast(
                 float,
                 await self.script(
                     keys=[self.key],
@@ -216,10 +127,6 @@ class AsyncRedisTokenBucket(TokenBucketBase, AsyncLuaScriptBase):
                     ],
                 ),
             )
-
-            # Parse timestamp
-            sleep_time = self.parse_timestamp(timestamp)
-
         except Exception as e:
             error_msg = str(e)
             # Lua script will return exception if max_sleep is exceeded
@@ -244,17 +151,3 @@ class AsyncRedisTokenBucket(TokenBucketBase, AsyncLuaScriptBase):
                     f"refill_frequency={self.refill_frequency})."
                 ) from None
             raise
-
-        # Sleep before returning
-        if sleep_time == 0:
-            return
-
-        await asyncio.sleep(sleep_time)
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        return
