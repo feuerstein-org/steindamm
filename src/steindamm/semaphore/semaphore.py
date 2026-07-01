@@ -27,15 +27,16 @@ You can also import and instantiate the concrete classes directly:
 """
 
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self, TypeAlias
 
 from steindamm.semaphore.semaphore_base import SemaphoreBase
 
-if TYPE_CHECKING:
-    from redis import Redis as SyncRedis
-    from redis.asyncio import Redis as AsyncRedis
-    from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
-    from redis.cluster import RedisCluster as SyncRedisCluster
+# A Redis connection accepted by create() (redis.Redis / redis.cluster.RedisCluster, or
+# their asyncio equivalents). Typed loosely - not as the concrete redis types - so that
+# callers without the optional `redis` package installed can still call create() cleanly
+# under strict type checkers, which otherwise resolve the redis types to Unknown. For
+# precise connection typing, construct SyncRedisSemaphore / AsyncRedisSemaphore directly.
+RedisConnection: TypeAlias = Any
 
 
 try:
@@ -84,7 +85,7 @@ class SyncSemaphore(SemaphoreBase):
         capacity: int = 5,
         expiry: int = 60,
         max_sleep: float = 30.0,
-        connection: "SyncRedis | SyncRedisCluster | None" = None,
+        connection: "RedisConnection | None" = None,
     ) -> "SyncSemaphore":
         """
         Create a semaphore, selecting the backend from ``connection``.
@@ -170,7 +171,7 @@ class AsyncSemaphore(SemaphoreBase):
         capacity: int = 5,
         expiry: int = 60,
         max_sleep: float = 30.0,
-        connection: "AsyncRedis | AsyncRedisCluster | None" = None,
+        connection: "RedisConnection | None" = None,
     ) -> "AsyncSemaphore":
         """
         Create a semaphore, selecting the backend from ``connection``.

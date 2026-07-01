@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, TypeAlias
 
 from steindamm.token_bucket.token_bucket_base import TokenBucketBase
 
@@ -38,10 +38,12 @@ if TYPE_CHECKING:
     from datetime import datetime
     from types import TracebackType
 
-    from redis import Redis as SyncRedis
-    from redis.asyncio import Redis as AsyncRedis
-    from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
-    from redis.cluster import RedisCluster as SyncRedisCluster
+# A Redis connection accepted by create() (redis.Redis / redis.cluster.RedisCluster, or
+# their asyncio equivalents). Typed loosely - not as the concrete redis types - so that
+# callers without the optional `redis` package installed can still call create() cleanly
+# under strict type checkers, which otherwise resolve the redis types to Unknown. For
+# precise connection typing, construct SyncRedisTokenBucket / AsyncRedisTokenBucket directly.
+RedisConnection: TypeAlias = Any
 
 
 # Runtime availability check
@@ -97,7 +99,7 @@ class SyncTokenBucket(TokenBucketBase):
         expiry: int = 60,
         tokens_to_consume: float = 1.0,
         window_start_time: datetime | None = None,
-        connection: SyncRedis | SyncRedisCluster | None = None,
+        connection: RedisConnection | None = None,
     ) -> SyncTokenBucket:
         """
         Create a token bucket, selecting the backend from ``connection``.
@@ -248,7 +250,7 @@ class AsyncTokenBucket(TokenBucketBase):
         expiry: int = 60,
         tokens_to_consume: float = 1.0,
         window_start_time: datetime | None = None,
-        connection: AsyncRedis | AsyncRedisCluster | None = None,
+        connection: RedisConnection | None = None,
     ) -> AsyncTokenBucket:
         """
         Create a token bucket, selecting the backend from ``connection``.
